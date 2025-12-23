@@ -14,7 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      games: {
+        Row: {
+          code: string
+          created_at: string
+          current_turn: string | null
+          dame_target: string | null
+          detective_target: string | null
+          doctor_target: string | null
+          host_id: string
+          id: string
+          mafia_count: number
+          mafia_target: string | null
+          phase: string
+          selected_roles: string[]
+          updated_at: string
+          votes: Json
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          current_turn?: string | null
+          dame_target?: string | null
+          detective_target?: string | null
+          doctor_target?: string | null
+          host_id: string
+          id?: string
+          mafia_count?: number
+          mafia_target?: string | null
+          phase?: string
+          selected_roles?: string[]
+          updated_at?: string
+          votes?: Json
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          current_turn?: string | null
+          dame_target?: string | null
+          detective_target?: string | null
+          doctor_target?: string | null
+          host_id?: string
+          id?: string
+          mafia_count?: number
+          mafia_target?: string | null
+          phase?: string
+          selected_roles?: string[]
+          updated_at?: string
+          votes?: Json
+        }
+        Relationships: []
+      }
+      players: {
+        Row: {
+          client_id: string
+          created_at: string
+          game_id: string
+          id: string
+          is_alive: boolean
+          is_host: boolean
+          is_muted: boolean
+          role: string | null
+          username: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          game_id: string
+          id?: string
+          is_alive?: boolean
+          is_host?: boolean
+          is_muted?: boolean
+          role?: string | null
+          username: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          game_id?: string
+          id?: string
+          is_alive?: boolean
+          is_host?: boolean
+          is_muted?: boolean
+          role?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "players_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

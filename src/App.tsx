@@ -23,7 +23,7 @@ const App = () => (
           <Route path="/create" element={<CreateGame />} />
           <Route path="/join" element={<JoinGame />} />
           <Route path="/tutorial" element={<Tutorial />} />
-          <Route path="/lobby" element={<GameLobbyPage />} />
+          <Route path="/lobby/:gameCode" element={<GameLobbyPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
