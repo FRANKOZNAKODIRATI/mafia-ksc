@@ -1,0 +1,374 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Player, RoleType } from '@/types/game';
+import { toast } from 'sonner';
+
+// Generate a unique client ID for this session
+const getClientId = () => {
+  let clientId = sessionStorage.getItem('mafia_client_id');
+  if (!clientId) {
+    clientId = crypto.randomUUID();
+    sessionStorage.setItem('mafia_client_id', clientId);
+  }
+  return clientId;
+};
+
+export interface GameData {
+  id: string;
+  code: string;
+  host_id: string;
+  phase: string;
+  current_turn: string | null;
+  mafia_count: number;
+  selected_roles: string[];
+  mafia_target: string | null;
+  doctor_target: string | null;
+  detective_target: string | null;
+  dame_target: string | null;
+  votes: Record<string, string>;
+}
+
+export interface PlayerData {
+  id: string;
+  game_id: string;
+  username: string;
+  role: string | null;
+  is_alive: boolean;
+  is_muted: boolean;
+  is_host: boolean;
+  client_id: string;
+}
+
+export const useGame = (gameCode: string | null) => {
+  const [game, setGame] = useState<GameData | null>(null);
+  const [players, setPlayers] = useState<PlayerData[]>([]);
+  const [currentPlayer, setCurrentPlayer] = useState<PlayerData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const clientId = getClientId();
+
+  // Fetch game and players
+  const fetchGameData = useCallback(async () => {
+    if (!gameCode) return;
+
+    try {
+      // Fetch game
+      const { data: gameData, error: gameError } = await supabase
+        .from('games')
+        .select('*')
+        .eq('code', gameCode)
+        .single();
+
+      if (gameError) throw gameError;
+      
+      setGame({
+        ...gameData,
+        votes: (gameData.votes as Record<string, string>) || {}
+      });
+
+      // Fetch players
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('*')
+        .eq('game_id', gameData.id)
+        .order('created_at', { ascending: true });
+
+      if (playersError) throw playersError;
+      
+      setPlayers(playersData || []);
+      
+      // Find current player
+      const current = playersData?.find(p => p.client_id === clientId);
+      if (current) {
+        setCurrentPlayer(current);
+      }
+    } catch (err: any) {
+      console.error('Error fetching game:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [gameCode, clientId]);
+
+  // Subscribe to real-time updates
+  useEffect(() => {
+    if (!gameCode) return;
+
+    fetchGameData();
+
+    // Subscribe to game changes
+    const gameChannel = supabase
+      .channel(`game-${gameCode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          console.log('Game update:', payload);
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            const newGame = payload.new as any;
+            setGame({
+              ...newGame,
+              votes: (newGame.votes as Record<string, string>) || {}
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to player changes for this game
+    const playersChannel = supabase
+      .channel(`players-${gameCode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'players',
+        },
+        async (payload) => {
+          console.log('Players update:', payload);
+          // Refetch players when any change happens
+          if (game?.id) {
+            const { data: playersData } = await supabase
+              .from('players')
+              .select('*')
+              .eq('game_id', game.id)
+              .order('created_at', { ascending: true });
+            
+            if (playersData) {
+              setPlayers(playersData);
+              const current = playersData.find(p => p.client_id === clientId);
+              if (current) {
+                setCurrentPlayer(current);
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(gameChannel);
+      supabase.removeChannel(playersChannel);
+    };
+  }, [gameCode, fetchGameData, clientId, game?.id]);
+
+  // Create a new game
+  const createGame = async (
+    username: string,
+    mafiaCount: number,
+    selectedRoles: RoleType[]
+  ): Promise<string> => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    try {
+      // Create game
+      const { data: gameData, error: gameError } = await supabase
+        .from('games')
+        .insert({
+          code,
+          host_id: clientId,
+          mafia_count: mafiaCount,
+          selected_roles: selectedRoles,
+          phase: 'lobby',
+        })
+        .select()
+        .single();
+
+      if (gameError) throw gameError;
+
+      // Create host player
+      const { error: playerError } = await supabase
+        .from('players')
+        .insert({
+          game_id: gameData.id,
+          username,
+          is_host: true,
+          client_id: clientId,
+        });
+
+      if (playerError) throw playerError;
+
+      return code;
+    } catch (err: any) {
+      console.error('Error creating game:', err);
+      throw err;
+    }
+  };
+
+  // Join an existing game
+  const joinGame = async (username: string): Promise<boolean> => {
+    if (!game) return false;
+
+    try {
+      const { error } = await supabase
+        .from('players')
+        .insert({
+          game_id: game.id,
+          username,
+          is_host: false,
+          client_id: clientId,
+        });
+
+      if (error) throw error;
+      
+      await fetchGameData();
+      return true;
+    } catch (err: any) {
+      console.error('Error joining game:', err);
+      throw err;
+    }
+  };
+
+  // Check if game exists
+  const checkGameExists = async (code: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from('games')
+      .select('id')
+      .eq('code', code)
+      .single();
+    
+    return !!data;
+  };
+
+  // Start the game (host only)
+  const startGame = async () => {
+    if (!game || !currentPlayer?.is_host) return;
+
+    try {
+      // Assign roles to players
+      const availableRoles: string[] = [
+        ...Array(game.mafia_count).fill('mafia'),
+        ...(game.selected_roles || []),
+      ];
+      
+      // Fill remaining with citizens
+      while (availableRoles.length < players.length) {
+        availableRoles.push('citizen');
+      }
+
+      // Shuffle roles
+      const shuffled = [...availableRoles].sort(() => Math.random() - 0.5);
+
+      // Update each player with their role
+      for (let i = 0; i < players.length; i++) {
+        await supabase
+          .from('players')
+          .update({ role: shuffled[i] })
+          .eq('id', players[i].id);
+      }
+
+      // Update game phase
+      await supabase
+        .from('games')
+        .update({ 
+          phase: 'night',
+          current_turn: 'mafia',
+        })
+        .eq('id', game.id);
+
+      toast.success('Igra je počela! Noć pada na grad...');
+    } catch (err: any) {
+      console.error('Error starting game:', err);
+      toast.error('Greška pri pokretanju igre');
+    }
+  };
+
+  // Submit night action
+  const submitNightAction = async (targetId: string) => {
+    if (!game || !currentPlayer) return;
+
+    const role = currentPlayer.role;
+    const updateData: Partial<GameData> = {};
+
+    if (role === 'mafia' || role === 'dame') {
+      if (role === 'mafia') {
+        updateData.mafia_target = targetId;
+      } else {
+        updateData.dame_target = targetId;
+      }
+    } else if (role === 'doctor') {
+      updateData.doctor_target = targetId;
+    } else if (role === 'detective') {
+      updateData.detective_target = targetId;
+    }
+
+    // Get next turn
+    const turnOrder: RoleType[] = ['mafia', 'dame', 'doctor', 'detective'];
+    const currentIndex = turnOrder.indexOf(game.current_turn as RoleType);
+    let nextTurn: RoleType | null = null;
+
+    for (let i = currentIndex + 1; i < turnOrder.length; i++) {
+      const hasRole = players.some(p => p.role === turnOrder[i] && p.is_alive);
+      if (hasRole) {
+        nextTurn = turnOrder[i];
+        break;
+      }
+    }
+
+    if (nextTurn) {
+      updateData.current_turn = nextTurn;
+    } else {
+      // Move to day/voting phase and resolve night
+      updateData.phase = 'voting';
+      updateData.current_turn = null;
+    }
+
+    try {
+      await supabase
+        .from('games')
+        .update(updateData)
+        .eq('id', game.id);
+    } catch (err: any) {
+      console.error('Error submitting night action:', err);
+    }
+  };
+
+  // Submit vote
+  const submitVote = async (targetId: string) => {
+    if (!game || !currentPlayer) return;
+
+    const newVotes = { ...game.votes, [currentPlayer.id]: targetId };
+
+    try {
+      await supabase
+        .from('games')
+        .update({ votes: newVotes })
+        .eq('id', game.id);
+    } catch (err: any) {
+      console.error('Error submitting vote:', err);
+    }
+  };
+
+  // Convert database player to frontend Player type
+  const convertToPlayer = (p: PlayerData): Player => ({
+    id: p.id,
+    username: p.username,
+    role: p.role as RoleType | undefined,
+    isAlive: p.is_alive,
+    isMuted: p.is_muted,
+    isHost: p.is_host,
+  });
+
+  return {
+    game,
+    players: players.map(convertToPlayer),
+    currentPlayer: currentPlayer ? convertToPlayer(currentPlayer) : null,
+    loading,
+    error,
+    clientId,
+    createGame,
+    joinGame,
+    checkGameExists,
+    startGame,
+    submitNightAction,
+    submitVote,
+    refetch: fetchGameData,
+  };
+};

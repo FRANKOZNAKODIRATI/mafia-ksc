@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ROLES, RoleType } from '@/types/game';
-import { ArrowLeft, Plus, Minus, Check, Copy } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Check, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useGame } from '@/hooks/useGame';
 
 const CreateGame = () => {
   const navigate = useNavigate();
@@ -14,6 +15,9 @@ const CreateGame = () => {
   const [selectedRoles, setSelectedRoles] = useState<RoleType[]>([]);
   const [username, setUsername] = useState('');
   const [gameCode, setGameCode] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  
+  const { createGame } = useGame(null);
 
   const specialRoles: RoleType[] = ['doctor', 'detective', 'dame'];
 
@@ -25,10 +29,19 @@ const CreateGame = () => {
     );
   };
 
-  const generateCode = () => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setGameCode(code);
-    setStep('code');
+  const handleGenerateCode = async () => {
+    setIsCreating(true);
+    try {
+      const code = await createGame(username, mafiaCount, selectedRoles);
+      setGameCode(code);
+      setStep('code');
+      toast.success('Igra stvorena!');
+    } catch (err: any) {
+      toast.error('Greška pri stvaranju igre');
+      console.error(err);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const copyCode = () => {
@@ -36,17 +49,8 @@ const CreateGame = () => {
     toast.success('Kod kopiran!');
   };
 
-  const startGame = () => {
-    // In a real app, this would create the game session
-    navigate('/lobby', { 
-      state: { 
-        gameCode, 
-        mafiaCount, 
-        selectedRoles, 
-        username,
-        isHost: true 
-      } 
-    });
+  const enterLobby = () => {
+    navigate(`/lobby/${gameCode}`);
   };
 
   return (
@@ -189,11 +193,18 @@ const CreateGame = () => {
               <Button
                 variant="mafia"
                 size="xl"
-                onClick={generateCode}
-                disabled={username.trim().length < 2}
+                onClick={handleGenerateCode}
+                disabled={username.trim().length < 2 || isCreating}
                 className="w-full"
               >
-                Generiraj Kod
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Stvaranje...
+                  </>
+                ) : (
+                  'Generiraj Kod'
+                )}
               </Button>
             </motion.div>
           )}
@@ -244,7 +255,7 @@ const CreateGame = () => {
               <Button
                 variant="mafia"
                 size="xl"
-                onClick={startGame}
+                onClick={enterLobby}
                 className="w-full"
               >
                 Uđi u Čekaonicu
