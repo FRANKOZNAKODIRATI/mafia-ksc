@@ -39,14 +39,36 @@ export interface PlayerData {
   client_id: string;
 }
 
+export type WinnerType = 'mafia' | 'citizens' | null;
+
 export const useGame = (gameCode: string | null) => {
   const [game, setGame] = useState<GameData | null>(null);
   const [players, setPlayers] = useState<PlayerData[]>([]);
   const [currentPlayer, setCurrentPlayer] = useState<PlayerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [winner, setWinner] = useState<WinnerType>(null);
 
   const clientId = getClientId();
+
+  // Check win conditions
+  const checkWinCondition = useCallback((playersList: PlayerData[]): WinnerType => {
+    const alivePlayers = playersList.filter(p => p.is_alive);
+    const aliveMafia = alivePlayers.filter(p => p.role === 'mafia');
+    const aliveOthers = alivePlayers.filter(p => p.role !== 'mafia');
+
+    // Mafia wins when they equal or outnumber others
+    if (aliveMafia.length >= aliveOthers.length && aliveMafia.length > 0) {
+      return 'mafia';
+    }
+
+    // Citizens win when all mafia are eliminated
+    if (aliveMafia.length === 0) {
+      return 'citizens';
+    }
+
+    return null;
+  }, []);
 
   // Fetch game and players
   const fetchGameData = useCallback(async () => {
@@ -83,13 +105,19 @@ export const useGame = (gameCode: string | null) => {
       if (current) {
         setCurrentPlayer(current);
       }
+
+      // Check win condition
+      const winResult = checkWinCondition(playersData || []);
+      if (winResult && gameData.phase !== 'lobby') {
+        setWinner(winResult);
+      }
     } catch (err: any) {
       console.error('Error fetching game:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [gameCode, clientId]);
+  }, [gameCode, clientId, checkWinCondition]);
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -147,6 +175,12 @@ export const useGame = (gameCode: string | null) => {
               if (current) {
                 setCurrentPlayer(current);
               }
+
+              // Check win condition on player update
+              const winResult = checkWinCondition(playersData);
+              if (winResult) {
+                setWinner(winResult);
+              }
             }
           }
         }
@@ -157,7 +191,7 @@ export const useGame = (gameCode: string | null) => {
       supabase.removeChannel(gameChannel);
       supabase.removeChannel(playersChannel);
     };
-  }, [gameCode, fetchGameData, clientId, game?.id]);
+  }, [gameCode, fetchGameData, clientId, game?.id, checkWinCondition]);
 
   // Create a new game
   const createGame = async (
@@ -242,27 +276,36 @@ export const useGame = (gameCode: string | null) => {
     if (!game || !currentPlayer?.is_host) return;
 
     try {
-      // Assign roles to players
+      // Get non-host players for role assignment
+      const nonHostPlayers = players.filter(p => !p.is_host);
+      
+      // Assign roles to non-host players only (host is narrator)
       const availableRoles: string[] = [
         ...Array(game.mafia_count).fill('mafia'),
         ...(game.selected_roles || []),
       ];
       
       // Fill remaining with citizens
-      while (availableRoles.length < players.length) {
+      while (availableRoles.length < nonHostPlayers.length) {
         availableRoles.push('citizen');
       }
 
       // Shuffle roles
       const shuffled = [...availableRoles].sort(() => Math.random() - 0.5);
 
-      // Update each player with their role
-      for (let i = 0; i < players.length; i++) {
+      // Update each non-host player with their role
+      for (let i = 0; i < nonHostPlayers.length; i++) {
         await supabase
           .from('players')
           .update({ role: shuffled[i] })
-          .eq('id', players[i].id);
+          .eq('id', nonHostPlayers[i].id);
       }
+
+      // Host gets special narrator role
+      await supabase
+        .from('players')
+        .update({ role: 'narrator' })
+        .eq('id', currentPlayer.id);
 
       // Update game phase
       await supabase
@@ -280,32 +323,17 @@ export const useGame = (gameCode: string | null) => {
     }
   };
 
-  // Submit night action
-  const submitNightAction = async (targetId: string) => {
-    if (!game || !currentPlayer) return;
+  // Host controls: advance to next turn
+  const advanceToNextTurn = async () => {
+    if (!game || !currentPlayer?.is_host) return;
 
-    const role = currentPlayer.role;
-    const updateData: Partial<GameData> = {};
-
-    if (role === 'mafia' || role === 'dame') {
-      if (role === 'mafia') {
-        updateData.mafia_target = targetId;
-      } else {
-        updateData.dame_target = targetId;
-      }
-    } else if (role === 'doctor') {
-      updateData.doctor_target = targetId;
-    } else if (role === 'detective') {
-      updateData.detective_target = targetId;
-    }
-
-    // Get next turn
     const turnOrder: RoleType[] = ['mafia', 'dame', 'doctor', 'detective'];
     const currentIndex = turnOrder.indexOf(game.current_turn as RoleType);
     let nextTurn: RoleType | null = null;
 
+    // Find next available role
     for (let i = currentIndex + 1; i < turnOrder.length; i++) {
-      const hasRole = players.some(p => p.role === turnOrder[i] && p.is_alive);
+      const hasRole = players.some(p => p.role === turnOrder[i] && p.is_alive && !p.is_host);
       if (hasRole) {
         nextTurn = turnOrder[i];
         break;
@@ -313,11 +341,166 @@ export const useGame = (gameCode: string | null) => {
     }
 
     if (nextTurn) {
-      updateData.current_turn = nextTurn;
+      await supabase
+        .from('games')
+        .update({ current_turn: nextTurn })
+        .eq('id', game.id);
     } else {
-      // Move to day/voting phase and resolve night
-      updateData.phase = 'voting';
-      updateData.current_turn = null;
+      // End night, start day
+      await resolveNight();
+    }
+  };
+
+  // Resolve night actions
+  const resolveNight = async () => {
+    if (!game) return;
+
+    // Check if target was saved by doctor
+    const targetId = game.mafia_target;
+    const savedId = game.doctor_target;
+
+    if (targetId && targetId !== savedId) {
+      // Mark player as dead (unless they are host)
+      const targetPlayer = players.find(p => p.id === targetId);
+      if (targetPlayer && !targetPlayer.is_host) {
+        await supabase
+          .from('players')
+          .update({ is_alive: false })
+          .eq('id', targetId);
+        
+        toast.info(`${targetPlayer.username} je eliminiran tijekom noći!`);
+      }
+    }
+
+    // Apply mute from dame
+    if (game.dame_target) {
+      await supabase
+        .from('players')
+        .update({ is_muted: true })
+        .eq('id', game.dame_target);
+    }
+
+    // Reset night actions and move to day
+    await supabase
+      .from('games')
+      .update({
+        phase: 'day',
+        current_turn: null,
+        mafia_target: null,
+        doctor_target: null,
+        detective_target: null,
+        dame_target: null,
+      })
+      .eq('id', game.id);
+  };
+
+  // Host controls: start voting
+  const startVoting = async () => {
+    if (!game || !currentPlayer?.is_host) return;
+
+    await supabase
+      .from('games')
+      .update({ 
+        phase: 'voting',
+        votes: {},
+      })
+      .eq('id', game.id);
+    
+    toast.success('Glasanje je počelo!');
+  };
+
+  // Host controls: end voting and eliminate
+  const endVoting = async () => {
+    if (!game || !currentPlayer?.is_host) return;
+
+    // Count votes
+    const voteCounts: Record<string, number> = {};
+    Object.values(game.votes).forEach(targetId => {
+      voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+    });
+
+    // Find player with most votes (exclude host from elimination)
+    let maxVotes = 0;
+    let eliminated: string | null = null;
+    
+    Object.entries(voteCounts).forEach(([playerId, count]) => {
+      const player = players.find(p => p.id === playerId);
+      if (count > maxVotes && player && !player.is_host) {
+        maxVotes = count;
+        eliminated = playerId;
+      }
+    });
+
+    if (eliminated) {
+      const eliminatedPlayer = players.find(p => p.id === eliminated);
+      await supabase
+        .from('players')
+        .update({ is_alive: false })
+        .eq('id', eliminated);
+      
+      toast.info(`${eliminatedPlayer?.username} je eliminiran glasanjem!`);
+    }
+
+    // Reset muted status for next round
+    await supabase
+      .from('players')
+      .update({ is_muted: false })
+      .eq('game_id', game.id);
+
+    // Check win condition after elimination
+    const updatedPlayers = players.map(p => 
+      p.id === eliminated ? { ...p, is_alive: false } : p
+    );
+    const winResult = checkWinCondition(updatedPlayers);
+
+    if (winResult) {
+      setWinner(winResult);
+      await supabase
+        .from('games')
+        .update({ phase: 'results' })
+        .eq('id', game.id);
+    } else {
+      // Start new night
+      await supabase
+        .from('games')
+        .update({
+          phase: 'night',
+          current_turn: 'mafia',
+          votes: {},
+        })
+        .eq('id', game.id);
+    }
+  };
+
+  // Host controls: start night
+  const startNight = async () => {
+    if (!game || !currentPlayer?.is_host) return;
+
+    await supabase
+      .from('games')
+      .update({
+        phase: 'night',
+        current_turn: 'mafia',
+        votes: {},
+      })
+      .eq('id', game.id);
+  };
+
+  // Submit night action
+  const submitNightAction = async (targetId: string) => {
+    if (!game || !currentPlayer) return;
+
+    const role = currentPlayer.role;
+    const updateData: Partial<GameData> = {};
+
+    if (role === 'mafia') {
+      updateData.mafia_target = targetId;
+    } else if (role === 'dame') {
+      updateData.dame_target = targetId;
+    } else if (role === 'doctor') {
+      updateData.doctor_target = targetId;
+    } else if (role === 'detective') {
+      updateData.detective_target = targetId;
     }
 
     try {
@@ -330,9 +513,16 @@ export const useGame = (gameCode: string | null) => {
     }
   };
 
-  // Submit vote
+  // Submit vote (exclude host from being voted)
   const submitVote = async (targetId: string) => {
     if (!game || !currentPlayer) return;
+
+    // Can't vote for host
+    const targetPlayer = players.find(p => p.id === targetId);
+    if (targetPlayer?.is_host) {
+      toast.error('Ne možeš glasati za domaćina!');
+      return;
+    }
 
     const newVotes = { ...game.votes, [currentPlayer.id]: targetId };
 
@@ -343,6 +533,41 @@ export const useGame = (gameCode: string | null) => {
         .eq('id', game.id);
     } catch (err: any) {
       console.error('Error submitting vote:', err);
+    }
+  };
+
+  // Reset game for play again
+  const resetGame = async () => {
+    if (!game || !currentPlayer?.is_host) return;
+
+    try {
+      // Reset all players
+      await supabase
+        .from('players')
+        .update({ 
+          is_alive: true, 
+          is_muted: false,
+          role: null,
+        })
+        .eq('game_id', game.id);
+
+      // Reset game state
+      await supabase
+        .from('games')
+        .update({
+          phase: 'lobby',
+          current_turn: null,
+          mafia_target: null,
+          doctor_target: null,
+          detective_target: null,
+          dame_target: null,
+          votes: {},
+        })
+        .eq('id', game.id);
+
+      setWinner(null);
+    } catch (err: any) {
+      console.error('Error resetting game:', err);
     }
   };
 
@@ -363,6 +588,7 @@ export const useGame = (gameCode: string | null) => {
     loading,
     error,
     clientId,
+    winner,
     createGame,
     joinGame,
     checkGameExists,
@@ -370,5 +596,11 @@ export const useGame = (gameCode: string | null) => {
     submitNightAction,
     submitVote,
     refetch: fetchGameData,
+    // Host controls
+    advanceToNextTurn,
+    startVoting,
+    endVoting,
+    startNight,
+    resetGame,
   };
 };
