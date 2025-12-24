@@ -22,7 +22,8 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
 
-  const alivePlayers = players.filter(p => p.isAlive && p.id !== currentPlayer.id);
+  // Exclude host from being voted and exclude self
+  const votablePlayers = players.filter(p => p.isAlive && p.id !== currentPlayer.id && !p.isHost);
   
   // Count votes per player
   const voteCounts: Record<string, number> = {};
@@ -30,8 +31,11 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
     voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
   });
 
+  // Host can't vote, just observes
+  const canVote = !currentPlayer.isHost && !currentPlayer.isMuted && currentPlayer.isAlive;
+
   const handleVote = () => {
-    if (selectedTarget && !hasVoted && !currentPlayer.isMuted) {
+    if (selectedTarget && !hasVoted && canVote) {
       onVote(selectedTarget);
       setHasVoted(true);
     }
@@ -70,8 +74,20 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
           </div>
         </div>
 
+        {/* Host indicator */}
+        {currentPlayer.isHost && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-accent/20 border border-accent/50 rounded-lg p-4 mb-6 text-center"
+          >
+            <span className="text-2xl">👑</span>
+            <p className="text-accent mt-2">Ti si domaćin - promatraj glasanje i završi ga pomoću kontrola dolje</p>
+          </motion.div>
+        )}
+
         {/* Muted indicator */}
-        {currentPlayer.isMuted && (
+        {currentPlayer.isMuted && !currentPlayer.isHost && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -83,21 +99,21 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
         )}
 
         {/* Player list */}
-        <div className="space-y-3">
-          {alivePlayers.map((player, index) => (
+        <div className="space-y-3 mb-24">
+          {votablePlayers.map((player, index) => (
             <motion.button
               key={player.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.1 }}
-              onClick={() => !hasVoted && !currentPlayer.isMuted && setSelectedTarget(player.id)}
-              disabled={hasVoted || currentPlayer.isMuted}
+              onClick={() => canVote && !hasVoted && setSelectedTarget(player.id)}
+              disabled={hasVoted || !canVote}
               className={cn(
                 "w-full p-4 rounded-xl border transition-all duration-300 flex items-center justify-between",
                 selectedTarget === player.id 
                   ? "border-primary bg-primary/10" 
                   : "border-border bg-card hover:border-primary/50",
-                (hasVoted || currentPlayer.isMuted) && "opacity-50 cursor-not-allowed"
+                (hasVoted || !canVote) && "opacity-50 cursor-not-allowed"
               )}
             >
               <div className="flex items-center gap-3">
@@ -124,12 +140,12 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
 
         {/* Vote button */}
         <AnimatePresence>
-          {selectedTarget && !hasVoted && !currentPlayer.isMuted && (
+          {selectedTarget && !hasVoted && canVote && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-8 left-4 right-4 flex justify-center"
+              className="fixed bottom-24 left-4 right-4 flex justify-center"
             >
               <Button 
                 variant="mafia" 

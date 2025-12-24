@@ -1,17 +1,23 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { RoleType } from '@/types/game';
 import GameLobby from '@/components/GameLobby';
 import NightPhase from '@/components/NightPhase';
 import VotingPhase from '@/components/VotingPhase';
+import DayPhase from '@/components/DayPhase';
+import WinScreen from '@/components/WinScreen';
+import HostControls from '@/components/HostControls';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGame } from '@/hooks/useGame';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 
 const GameLobbyPage = () => {
   const { gameCode } = useParams<{ gameCode: string }>();
   const navigate = useNavigate();
+  const [votingStarted, setVotingStarted] = useState(false);
+  const { sounds, preloadAll } = useSoundEffects();
   
   const {
     game,
@@ -19,10 +25,46 @@ const GameLobbyPage = () => {
     currentPlayer,
     loading,
     error,
+    winner,
     startGame,
     submitNightAction,
     submitVote,
+    advanceToNextTurn,
+    startVoting,
+    endVoting,
+    startNight,
+    resetGame,
   } = useGame(gameCode || null);
+
+  // Preload sounds on mount
+  useEffect(() => {
+    preloadAll();
+  }, [preloadAll]);
+
+  // Play sounds on phase changes
+  useEffect(() => {
+    if (!game) return;
+    
+    if (game.phase === 'night') {
+      sounds.playNightFall();
+    } else if (game.phase === 'voting') {
+      sounds.playTransition();
+      setVotingStarted(true);
+    } else if (game.phase === 'day') {
+      sounds.playTransition();
+      setVotingStarted(false);
+    }
+  }, [game?.phase, sounds]);
+
+  // Play sound on role wake up
+  useEffect(() => {
+    if (game?.phase === 'night' && game.current_turn) {
+      const isMyTurn = currentPlayer?.role === game.current_turn;
+      if (isMyTurn) {
+        sounds.playWakeUp();
+      }
+    }
+  }, [game?.current_turn, game?.phase, currentPlayer?.role, sounds]);
 
   // Redirect if error
   useEffect(() => {
@@ -35,7 +77,6 @@ const GameLobbyPage = () => {
   // Redirect if no current player (not joined)
   useEffect(() => {
     if (!loading && game && !currentPlayer) {
-      // Player hasn't joined this game yet
       navigate(`/join?code=${gameCode}`);
     }
   }, [loading, game, currentPlayer, gameCode, navigate]);
@@ -60,19 +101,52 @@ const GameLobbyPage = () => {
   const isHost = currentPlayer.isHost;
 
   const handleStartGame = async () => {
+    sounds.playRoleReveal();
     await startGame();
   };
 
   const handleNightAction = async (targetId: string) => {
     const target = players.find(p => p.id === targetId);
     toast.success(`Odabrao si: ${target?.username}`);
+    sounds.playTick();
     await submitNightAction(targetId);
   };
 
   const handleVote = async (targetId: string) => {
+    sounds.playVote();
     await submitVote(targetId);
     toast.success('Glas zabilježen!');
   };
+
+  const handlePlayAgain = async () => {
+    await resetGame();
+  };
+
+  const handleExit = () => {
+    navigate('/');
+  };
+
+  const handleStartVoting = async () => {
+    await startVoting();
+    setVotingStarted(true);
+  };
+
+  const handleEndVoting = async () => {
+    sounds.playElimination();
+    await endVoting();
+    setVotingStarted(false);
+  };
+
+  // Show win screen
+  if (winner) {
+    return (
+      <WinScreen
+        winner={winner}
+        onPlayAgain={handlePlayAgain}
+        onExit={handleExit}
+      />
+    );
+  }
 
   // Render based on phase
   if (phase === 'lobby') {
@@ -103,12 +177,50 @@ const GameLobbyPage = () => {
 
   if (phase === 'night' && currentTurn) {
     return (
-      <NightPhase
-        players={players}
-        currentPlayer={currentPlayer}
-        currentTurn={currentTurn}
-        onAction={handleNightAction}
-      />
+      <>
+        <NightPhase
+          players={players}
+          currentPlayer={currentPlayer}
+          currentTurn={currentTurn}
+          onAction={handleNightAction}
+          isHost={isHost}
+        />
+        {isHost && (
+          <HostControls
+            phase={phase}
+            currentTurn={currentTurn}
+            onStartVoting={handleStartVoting}
+            onEndVoting={handleEndVoting}
+            onNextTurn={advanceToNextTurn}
+            onStartNight={startNight}
+            votingStarted={votingStarted}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (phase === 'day') {
+    return (
+      <>
+        <DayPhase
+          players={players}
+          currentPlayer={currentPlayer}
+          isHost={isHost}
+          onStartVoting={handleStartVoting}
+        />
+        {isHost && (
+          <HostControls
+            phase={phase}
+            currentTurn={null}
+            onStartVoting={handleStartVoting}
+            onEndVoting={handleEndVoting}
+            onNextTurn={advanceToNextTurn}
+            onStartNight={startNight}
+            votingStarted={votingStarted}
+          />
+        )}
+      </>
     );
   }
 
@@ -131,6 +243,17 @@ const GameLobbyPage = () => {
           votes={game.votes}
           onVote={handleVote}
         />
+        {isHost && (
+          <HostControls
+            phase={phase}
+            currentTurn={null}
+            onStartVoting={handleStartVoting}
+            onEndVoting={handleEndVoting}
+            onNextTurn={advanceToNextTurn}
+            onStartNight={startNight}
+            votingStarted={votingStarted}
+          />
+        )}
       </>
     );
   }
