@@ -12,6 +12,7 @@ const CreateGame = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState<'settings' | 'username' | 'code'>('settings');
   const [mafiaCount, setMafiaCount] = useState(1);
+  const [maxPlayers, setMaxPlayers] = useState(8);
   const [selectedRoles, setSelectedRoles] = useState<RoleType[]>([]);
   const [username, setUsername] = useState('');
   const [gameCode, setGameCode] = useState('');
@@ -32,7 +33,7 @@ const CreateGame = () => {
   const handleGenerateCode = async () => {
     setIsCreating(true);
     try {
-      const code = await createGame(username, mafiaCount, selectedRoles);
+      const code = await createGame(username, mafiaCount, selectedRoles, maxPlayers);
       setGameCode(code);
       setStep('code');
       toast.success('Igra stvorena!');
@@ -108,6 +109,37 @@ const CreateGame = () => {
                 </div>
                 <p className="text-center text-sm text-muted-foreground mt-2">
                   Preporučeno: 1 mafija na 4-5 igrača
+                </p>
+              </div>
+
+              {/* Max players */}
+              <div className="glass-card p-6 mb-6">
+                <h3 className="font-display text-xl text-foreground mb-4 flex items-center gap-2">
+                  <span>👥</span> Maksimalan Broj Igrača
+                </h3>
+                <div className="flex items-center justify-center gap-6">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setMaxPlayers(Math.max(mafiaCount + selectedRoles.length + 2, maxPlayers - 1))}
+                    disabled={maxPlayers <= mafiaCount + selectedRoles.length + 2}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <span className="font-display text-5xl text-primary w-16 text-center">
+                    {maxPlayers}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setMaxPlayers(Math.min(20, maxPlayers + 1))}
+                    disabled={maxPlayers >= 20}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-center text-sm text-muted-foreground mt-2">
+                  Min: {mafiaCount + selectedRoles.length + 2} (uloge + 1 građanin + domaćin)
                 </p>
               </div>
 
