@@ -42,7 +42,10 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
   // Exclude host from being voted and exclude self
   const votablePlayers = players.filter(p => p.isAlive && p.id !== currentPlayer.id && !p.isHost);
   
-  // Count votes per player
+  // Add "skip" option as a virtual target
+  const SKIP_VOTE_ID = 'SKIP_VOTE';
+  
+  // Count votes per player (including skip)
   const voteCounts: Record<string, number> = {};
   Object.values(votes).forEach(targetId => {
     voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
@@ -57,6 +60,9 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
       setHasVoted(true);
     }
   };
+
+  // Check if voting for skip
+  const isSkipVote = selectedTarget === SKIP_VOTE_ID;
 
   return (
     <motion.div
@@ -116,7 +122,7 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
         )}
 
         {/* Player list */}
-        <div className="space-y-3 mb-24">
+        <div className="space-y-3 mb-6">
           {votablePlayers.map((player, index) => (
             <motion.button
               key={player.id}
@@ -154,6 +160,40 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
             </motion.button>
           ))}
         </div>
+
+        {/* Skip vote option */}
+        <motion.button
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: votablePlayers.length * 0.1 }}
+          onClick={() => canVote && !hasVoted && setSelectedTarget(SKIP_VOTE_ID)}
+          disabled={hasVoted || !canVote}
+          className={cn(
+            "w-full p-4 rounded-xl border-2 border-dashed transition-all duration-300 flex items-center justify-between mb-24",
+            selectedTarget === SKIP_VOTE_ID 
+              ? "border-yellow-500 bg-yellow-500/10" 
+              : "border-border bg-card/50 hover:border-yellow-500/50",
+            (hasVoted || !canVote) && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center text-2xl">
+              ⏭️
+            </div>
+            <span className="font-medium text-yellow-500">Preskoči glasanje</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {voteCounts[SKIP_VOTE_ID] > 0 && (
+              <span className="bg-yellow-500 text-black text-sm font-bold px-3 py-1 rounded-full">
+                {voteCounts[SKIP_VOTE_ID]} {voteCounts[SKIP_VOTE_ID] === 1 ? 'glas' : 'glasova'}
+              </span>
+            )}
+            {selectedTarget === SKIP_VOTE_ID && (
+              <span className="text-yellow-500 text-xl">✓</span>
+            )}
+          </div>
+        </motion.button>
 
         {/* Vote button */}
         <AnimatePresence>

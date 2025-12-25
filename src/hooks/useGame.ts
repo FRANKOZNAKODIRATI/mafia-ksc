@@ -426,17 +426,21 @@ export const useGame = (gameCode: string | null) => {
   const endVoting = async () => {
     if (!game || !currentPlayer?.is_host) return;
 
+    const SKIP_VOTE_ID = 'SKIP_VOTE';
+
     // Count votes
     const voteCounts: Record<string, number> = {};
     Object.values(game.votes).forEach(targetId => {
       voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
     });
 
-    // Find player with most votes (exclude host from elimination)
+    // Find player with most votes (exclude host from elimination, handle skip vote)
     let maxVotes = 0;
     let eliminated: string | null = null;
+    let skipVotes = voteCounts[SKIP_VOTE_ID] || 0;
     
     Object.entries(voteCounts).forEach(([playerId, count]) => {
+      if (playerId === SKIP_VOTE_ID) return; // Skip the skip vote entry
       const player = players.find(p => p.id === playerId);
       if (count > maxVotes && player && !player.is_host) {
         maxVotes = count;
@@ -444,7 +448,11 @@ export const useGame = (gameCode: string | null) => {
       }
     });
 
-    if (eliminated) {
+    // If skip has more or equal votes than any player, skip elimination
+    if (skipVotes >= maxVotes) {
+      toast.info('Glasanje preskočeno! Nitko nije eliminiran.');
+      eliminated = null;
+    } else if (eliminated) {
       const eliminatedPlayer = players.find(p => p.id === eliminated);
       await supabase
         .from('players')
