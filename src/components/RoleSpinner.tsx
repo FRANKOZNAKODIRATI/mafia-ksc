@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ROLES, RoleType } from '@/types/game';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 
 interface RoleSpinnerProps {
   availableRoles: RoleType[];
@@ -18,6 +19,7 @@ const RoleSpinner: React.FC<RoleSpinnerProps> = ({
   const [currentRole, setCurrentRole] = useState<RoleType>('citizen');
   const [finalRole, setFinalRole] = useState<RoleType | null>(null);
   const [spinSpeed, setSpinSpeed] = useState(50);
+  const { sounds } = useSoundEffects();
 
   useEffect(() => {
     if (!isSpinning) return;
@@ -60,7 +62,11 @@ const RoleSpinner: React.FC<RoleSpinnerProps> = ({
         const selected = selectRole();
         setFinalRole(selected);
         setCurrentRole(selected);
+        sounds.playRoleReveal();
         onComplete(selected);
+      } else {
+        // Play tick sound during spinning
+        sounds.playTick();
       }
     }, spinSpeed);
 

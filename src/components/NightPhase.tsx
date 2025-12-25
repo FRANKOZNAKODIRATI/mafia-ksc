@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Player, RoleType, ROLES } from '@/types/game';
 import PlayerCircle from './PlayerCircle';
 import { Button } from './ui/button';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 
 interface NightPhaseProps {
   players: Player[];
@@ -24,6 +25,7 @@ const NightPhase: React.FC<NightPhaseProps> = ({
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [showingSleep, setShowingSleep] = useState(true);
   const [hasActed, setHasActed] = useState(false);
+  const { sounds } = useSoundEffects();
   
   const isMyTurn = currentPlayer.role === currentTurn || 
     (currentTurn === 'mafia' && currentPlayer.role === 'dame');
@@ -51,6 +53,7 @@ const NightPhase: React.FC<NightPhaseProps> = ({
 
   const handleConfirm = () => {
     if (selectedTarget && !hasActed) {
+      sounds.playTick();
       onAction(selectedTarget);
       setHasActed(true);
       setSelectedTarget(null);
