@@ -142,6 +142,7 @@ const GameLobbyPage = () => {
     return (
       <WinScreen
         winner={winner}
+        players={players}
         onPlayAgain={handlePlayAgain}
         onExit={handleExit}
       />
