@@ -242,6 +242,8 @@ const GameLobbyPage = () => {
           currentPlayer={currentPlayer}
           votes={game.votes}
           onVote={handleVote}
+          onTimeUp={handleEndVoting}
+          duration={15}
         />
         {isHost && (
           <HostControls
