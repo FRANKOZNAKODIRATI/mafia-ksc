@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Player } from '@/types/game';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 
 interface VotingPhaseProps {
   players: Player[];
@@ -24,6 +25,7 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(duration);
+  const { sounds } = useSoundEffects();
 
   // Countdown timer
   useEffect(() => {
@@ -33,11 +35,17 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
     }
 
     const timer = setInterval(() => {
-      setTimeRemaining(prev => prev - 1);
+      setTimeRemaining(prev => {
+        // Play tick sound for last 5 seconds
+        if (prev <= 6 && prev > 1) {
+          sounds.playTick();
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeRemaining, onTimeUp]);
+  }, [timeRemaining, onTimeUp, sounds]);
 
   // Exclude host from being voted and exclude self
   const votablePlayers = players.filter(p => p.isAlive && p.id !== currentPlayer.id && !p.isHost);

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Player, ROLES } from '@/types/game';
 import PlayerCircle from './PlayerCircle';
 import { Sun, Users } from 'lucide-react';
 import { Button } from './ui/button';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 
 interface DayPhaseProps {
   players: Player[];
@@ -20,6 +21,12 @@ const DayPhase: React.FC<DayPhaseProps> = ({
 }) => {
   const alivePlayers = players.filter(p => p.isAlive);
   const deadPlayers = players.filter(p => !p.isAlive);
+  const { sounds } = useSoundEffects();
+
+  // Play wake up sound when day starts
+  useEffect(() => {
+    sounds.playWakeUp();
+  }, [sounds]);
 
   return (
     <motion.div
