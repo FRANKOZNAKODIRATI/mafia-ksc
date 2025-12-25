@@ -197,7 +197,8 @@ export const useGame = (gameCode: string | null) => {
   const createGame = async (
     username: string,
     mafiaCount: number,
-    selectedRoles: RoleType[]
+    selectedRoles: RoleType[],
+    maxPlayers: number = 8
   ): Promise<string> => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     
