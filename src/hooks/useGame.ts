@@ -54,15 +54,27 @@ export const useGame = (gameCode: string | null) => {
   // Check win conditions
   const checkWinCondition = useCallback((playersList: PlayerData[]): WinnerType => {
     const alivePlayers = playersList.filter(p => p.is_alive);
-    const aliveMafia = alivePlayers.filter(p => p.role === 'mafia');
-    const aliveOthers = alivePlayers.filter(p => p.role !== 'mafia');
+    
+    // Don't check win condition if roles aren't assigned yet (lobby phase)
+    const playersWithRoles = alivePlayers.filter(p => p.role !== null);
+    if (playersWithRoles.length === 0) {
+      return null;
+    }
+    
+    // Mafia team: mafia + dame
+    const mafiaTeam = alivePlayers.filter(p => p.role === 'mafia' || p.role === 'dame');
+    // Citizens team: citizen + doctor + detective (and host who has no role but is alive)
+    const citizensTeam = alivePlayers.filter(p => 
+      p.role === 'citizen' || p.role === 'doctor' || p.role === 'detective' || p.role === null
+    );
 
-    // Mafia wins when they equal or outnumber others
-    if (aliveMafia.length >= aliveOthers.length && aliveMafia.length > 0) {
+    // Mafia wins when mafia team equals or outnumbers citizens team
+    if (mafiaTeam.length >= citizensTeam.length && mafiaTeam.length > 0) {
       return 'mafia';
     }
 
-    // Citizens win when all mafia are eliminated
+    // Citizens win when all mafia (not dame) are eliminated
+    const aliveMafia = alivePlayers.filter(p => p.role === 'mafia');
     if (aliveMafia.length === 0) {
       return 'citizens';
     }

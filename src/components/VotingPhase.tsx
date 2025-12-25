@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Player } from '@/types/game';
 import { Button } from './ui/button';
@@ -9,7 +9,8 @@ interface VotingPhaseProps {
   currentPlayer: Player;
   votes: Record<string, string>;
   onVote: (targetId: string) => void;
-  timeRemaining?: number;
+  onTimeUp?: () => void;
+  duration?: number;
 }
 
 const VotingPhase: React.FC<VotingPhaseProps> = ({
@@ -17,10 +18,26 @@ const VotingPhase: React.FC<VotingPhaseProps> = ({
   currentPlayer,
   votes,
   onVote,
-  timeRemaining = 60,
+  onTimeUp,
+  duration = 15,
 }) => {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(duration);
+
+  // Countdown timer
+  useEffect(() => {
+    if (timeRemaining <= 0) {
+      onTimeUp?.();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeRemaining(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeRemaining, onTimeUp]);
 
   // Exclude host from being voted and exclude self
   const votablePlayers = players.filter(p => p.isAlive && p.id !== currentPlayer.id && !p.isHost);
