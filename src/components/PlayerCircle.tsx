@@ -68,11 +68,16 @@ const PlayerCircle: React.FC<PlayerCircleProps> = ({
                   "w-14 h-14 rounded-full flex items-center justify-center text-2xl border-2 transition-all duration-300",
                   isCurrentPlayer ? "border-accent" : "border-border",
                   isSelected && "border-primary ring-4 ring-primary/30",
-                  isSelectable && "hover:border-primary"
+                  isSelectable && "hover:border-primary",
+                  !player.isAlive && "bg-red-500/30 border-red-500"
                 )}
                 style={{
-                  backgroundColor: showRoles && role ? role.color + '33' : 'hsl(var(--card))',
-                  borderColor: isSelected ? role?.color : undefined,
+                  backgroundColor: !player.isAlive 
+                    ? undefined 
+                    : (showRoles && role ? role.color + '33' : 'hsl(var(--card))'),
+                  borderColor: !player.isAlive 
+                    ? undefined 
+                    : (isSelected ? role?.color : undefined),
                 }}
               >
                 {showRoles && role ? (
