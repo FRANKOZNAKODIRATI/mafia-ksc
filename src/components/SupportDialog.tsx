@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Instagram, Heart } from 'lucide-react';
-import { Button } from './ui/button';
+import yukitsunodaProfile from '@/assets/yukitsunoda-profile.jpg';
+import dinomoranjkicProfile from '@/assets/dinomoranjkic-profile.jpg';
 
 interface SupportDialogProps {
   isOpen: boolean;
@@ -12,12 +13,12 @@ const instagramAccounts = [
   {
     username: '_dinomoranjkic_',
     displayName: 'Dino Moranjkić',
-    profilePic: 'https://i.pravatar.cc/150?u=dinomoranjkic',
+    profilePic: dinomoranjkicProfile,
   },
   {
     username: 'Yukitsunoda_fan',
     displayName: 'Yuki Tsunoda Fan',
-    profilePic: 'https://i.pravatar.cc/150?u=yukitsunodafan',
+    profilePic: yukitsunodaProfile,
   },
 ];
 
