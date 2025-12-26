@@ -1,14 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Users, Play, BookOpen } from 'lucide-react';
+import { Users, Play, BookOpen, Heart } from 'lucide-react';
+import SupportDialog from '@/components/SupportDialog';
+import SoundToggle from '@/components/SoundToggle';
 
 const Index = () => {
   const navigate = useNavigate();
+  const [showSupport, setShowSupport] = useState(false);
 
   return (
     <div className="min-h-screen bg-background overflow-hidden relative">
+      <SoundToggle />
+      
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse" />
@@ -102,6 +107,16 @@ const Index = () => {
             <BookOpen className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
             Tutorial
           </Button>
+
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={() => setShowSupport(true)}
+            className="group"
+          >
+            <Heart className="w-5 h-5 mr-2 text-red-500 group-hover:scale-110 transition-transform" />
+            Podrška
+          </Button>
         </motion.div>
 
         {/* Footer hint */}
@@ -114,6 +129,8 @@ const Index = () => {
           4+ igrača preporučeno
         </motion.p>
       </div>
+
+      <SupportDialog isOpen={showSupport} onClose={() => setShowSupport(false)} />
     </div>
   );
 };

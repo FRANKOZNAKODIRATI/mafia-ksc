@@ -8,6 +8,7 @@ import VotingPhase from '@/components/VotingPhase';
 import DayPhase from '@/components/DayPhase';
 import WinScreen from '@/components/WinScreen';
 import HostControls from '@/components/HostControls';
+import SoundToggle from '@/components/SoundToggle';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGame } from '@/hooks/useGame';
@@ -17,7 +18,7 @@ const GameLobbyPage = () => {
   const { gameCode } = useParams<{ gameCode: string }>();
   const navigate = useNavigate();
   const [votingStarted, setVotingStarted] = useState(false);
-  const { sounds, preloadAll } = useSoundEffects();
+  const { sounds, music, preloadAll, stopAllSounds } = useSoundEffects();
   
   const {
     game,
@@ -41,20 +42,25 @@ const GameLobbyPage = () => {
     preloadAll();
   }, [preloadAll]);
 
-  // Play sounds on phase changes
+  // Play sounds and music on phase changes
   useEffect(() => {
     if (!game) return;
     
     if (game.phase === 'night') {
       sounds.playNightFall();
+      music.playNightMusic();
     } else if (game.phase === 'voting') {
       sounds.playTransition();
+      music.playDayMusic();
       setVotingStarted(true);
     } else if (game.phase === 'day') {
       sounds.playTransition();
+      music.playDayMusic();
       setVotingStarted(false);
+    } else if (game.phase === 'lobby' || game.phase === 'results') {
+      music.stop();
     }
-  }, [game?.phase, sounds]);
+  }, [game?.phase, sounds, music]);
 
   // Play sound on role wake up
   useEffect(() => {
@@ -137,15 +143,25 @@ const GameLobbyPage = () => {
     setVotingStarted(false);
   };
 
+  // Stop music when game ends
+  useEffect(() => {
+    if (winner) {
+      music.stop();
+    }
+  }, [winner, music]);
+
   // Show win screen
   if (winner) {
     return (
-      <WinScreen
-        winner={winner}
-        players={players}
-        onPlayAgain={handlePlayAgain}
-        onExit={handleExit}
-      />
+      <>
+        <SoundToggle />
+        <WinScreen
+          winner={winner}
+          players={players}
+          onPlayAgain={handlePlayAgain}
+          onExit={handleExit}
+        />
+      </>
     );
   }
 
@@ -153,6 +169,7 @@ const GameLobbyPage = () => {
   if (phase === 'lobby') {
     return (
       <>
+        <SoundToggle />
         <motion.button
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -179,6 +196,7 @@ const GameLobbyPage = () => {
   if (phase === 'night' && currentTurn) {
     return (
       <>
+        <SoundToggle />
         <NightPhase
           players={players}
           currentPlayer={currentPlayer}
@@ -204,6 +222,7 @@ const GameLobbyPage = () => {
   if (phase === 'day') {
     return (
       <>
+        <SoundToggle />
         <DayPhase
           players={players}
           currentPlayer={currentPlayer}
@@ -228,6 +247,7 @@ const GameLobbyPage = () => {
   if (phase === 'voting') {
     return (
       <>
+        <SoundToggle />
         <motion.button
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}

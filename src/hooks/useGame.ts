@@ -188,10 +188,13 @@ export const useGame = (gameCode: string | null) => {
                 setCurrentPlayer(current);
               }
 
-              // Check win condition on player update
-              const winResult = checkWinCondition(playersData);
-              if (winResult) {
-                setWinner(winResult);
+              // Check win condition on player update (only if game has started)
+              // We need to get current game phase from state
+              if (game && game.phase !== 'lobby') {
+                const winResult = checkWinCondition(playersData);
+                if (winResult) {
+                  setWinner(winResult);
+                }
               }
             }
           }
