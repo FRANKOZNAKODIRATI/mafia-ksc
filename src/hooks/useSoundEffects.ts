@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 
 // Pre-defined sound URLs using free sound effects
 const SOUNDS = {
@@ -13,11 +13,23 @@ const SOUNDS = {
   tick: 'https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3', // Tick
 };
 
+// Background music URLs (longer ambient tracks)
+const MUSIC = {
+  night: 'https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3', // Dark suspense
+  day: 'https://assets.mixkit.co/active_storage/sfx/2514/2514-preview.mp3', // Peaceful ambient
+};
+
 type SoundType = keyof typeof SOUNDS;
+type MusicType = keyof typeof MUSIC;
+
+// Global mute state to persist across hook instances
+let globalMuted = false;
 
 export const useSoundEffects = () => {
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
-  const isMuted = useRef(false);
+  const musicRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const [isMuted, setIsMutedState] = useState(globalMuted);
+  const currentMusic = useRef<MusicType | null>(null);
 
   const preloadSound = useCallback((type: SoundType) => {
     if (!audioRefs.current.has(type)) {
@@ -28,8 +40,18 @@ export const useSoundEffects = () => {
     }
   }, []);
 
+  const preloadMusic = useCallback((type: MusicType) => {
+    if (!musicRefs.current.has(type)) {
+      const audio = new Audio(MUSIC[type]);
+      audio.preload = 'auto';
+      audio.volume = 0.2;
+      audio.loop = true;
+      musicRefs.current.set(type, audio);
+    }
+  }, []);
+
   const playSound = useCallback((type: SoundType, volume: number = 0.5) => {
-    if (isMuted.current) return;
+    if (globalMuted) return;
 
     try {
       let audio = audioRefs.current.get(type);
@@ -43,12 +65,51 @@ export const useSoundEffects = () => {
       audio.volume = Math.min(1, Math.max(0, volume));
       audio.currentTime = 0;
       audio.play().catch(err => {
-        // Auto-play may be blocked by browser
         console.log('Sound play blocked:', err);
       });
     } catch (err) {
       console.error('Error playing sound:', err);
     }
+  }, []);
+
+  const playMusic = useCallback((type: MusicType) => {
+    if (globalMuted) return;
+
+    // Stop current music if different
+    if (currentMusic.current && currentMusic.current !== type) {
+      const oldMusic = musicRefs.current.get(currentMusic.current);
+      if (oldMusic) {
+        oldMusic.pause();
+        oldMusic.currentTime = 0;
+      }
+    }
+
+    try {
+      let audio = musicRefs.current.get(type);
+      
+      if (!audio) {
+        audio = new Audio(MUSIC[type]);
+        audio.preload = 'auto';
+        audio.loop = true;
+        musicRefs.current.set(type, audio);
+      }
+      
+      audio.volume = 0.15;
+      currentMusic.current = type;
+      audio.play().catch(err => {
+        console.log('Music play blocked:', err);
+      });
+    } catch (err) {
+      console.error('Error playing music:', err);
+    }
+  }, []);
+
+  const stopMusic = useCallback(() => {
+    musicRefs.current.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    currentMusic.current = null;
   }, []);
 
   const stopSound = useCallback((type: SoundType) => {
@@ -64,28 +125,49 @@ export const useSoundEffects = () => {
       audio.pause();
       audio.currentTime = 0;
     });
+    musicRefs.current.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    currentMusic.current = null;
   }, []);
 
+  const toggleMute = useCallback(() => {
+    globalMuted = !globalMuted;
+    setIsMutedState(globalMuted);
+    if (globalMuted) {
+      stopAllSounds();
+    }
+  }, [stopAllSounds]);
+
   const setMuted = useCallback((muted: boolean) => {
-    isMuted.current = muted;
+    globalMuted = muted;
+    setIsMutedState(muted);
     if (muted) {
       stopAllSounds();
     }
   }, [stopAllSounds]);
 
-  // Preload all sounds
+  // Preload all sounds and music
   const preloadAll = useCallback(() => {
     Object.keys(SOUNDS).forEach(key => {
       preloadSound(key as SoundType);
     });
-  }, [preloadSound]);
+    Object.keys(MUSIC).forEach(key => {
+      preloadMusic(key as MusicType);
+    });
+  }, [preloadSound, preloadMusic]);
 
   return {
     playSound,
     stopSound,
     stopAllSounds,
     setMuted,
+    toggleMute,
+    isMuted,
     preloadAll,
+    playMusic,
+    stopMusic,
     sounds: {
       playNightFall: () => playSound('nightFall', 0.3),
       playWakeUp: () => playSound('wakeUp', 0.5),
@@ -96,6 +178,11 @@ export const useSoundEffects = () => {
       playRoleReveal: () => playSound('roleReveal', 0.5),
       playTransition: () => playSound('transition', 0.4),
       playTick: () => playSound('tick', 0.3),
+    },
+    music: {
+      playNightMusic: () => playMusic('night'),
+      playDayMusic: () => playMusic('day'),
+      stop: stopMusic,
     }
   };
 };
