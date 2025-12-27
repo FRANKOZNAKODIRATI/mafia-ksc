@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      bug_reports: {
+        Row: {
+          created_at: string
+          description: string
+          email: string | null
+          id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          email?: string | null
+          id?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          email?: string | null
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       games: {
         Row: {
           code: string
