@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bug, MessageSquare, Instagram, Send } from 'lucide-react';
+import { X, Bug, MessageSquare, Instagram, Send, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Input } from './ui/input';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import yukitsunodaProfile from '@/assets/yukitsunoda-profile.jpg';
 import dinomoranjkicProfile from '@/assets/dinomoranjkic-profile.jpg';
 
@@ -31,16 +32,35 @@ const SupportDialog: React.FC<SupportDialogProps> = ({ isOpen, onClose }) => {
   const [bugDescription, setBugDescription] = useState('');
   const [contactMessage, setContactMessage] = useState('');
   const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleBugSubmit = () => {
+  const handleBugSubmit = async () => {
     if (!bugDescription.trim()) {
       toast.error('Molimo opišite bug');
       return;
     }
-    // In a real app, this would send to a backend
-    toast.success('Hvala na prijavi buga! Razmotrit ćemo ga.');
-    setBugDescription('');
-    onClose();
+
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-bug-report', {
+        body: {
+          description: bugDescription.trim(),
+          email: email.trim() || null,
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success('Hvala na prijavi buga! Razmotrit ćemo ga.');
+      setBugDescription('');
+      setEmail('');
+      onClose();
+    } catch (error) {
+      console.error('Error submitting bug report:', error);
+      toast.error('Greška pri slanju prijave. Pokušajte ponovo.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleContactSubmit = () => {
@@ -132,14 +152,16 @@ const SupportDialog: React.FC<SupportDialogProps> = ({ isOpen, onClose }) => {
                     maxLength={1000}
                   />
                 </div>
-                <Button onClick={handleBugSubmit} className="w-full gap-2">
-                  <Send className="w-4 h-4" />
-                  Pošalji Prijavu
+                <Button onClick={handleBugSubmit} className="w-full gap-2" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  {isSubmitting ? 'Šaljem...' : 'Pošalji Prijavu'}
                 </Button>
               </motion.div>
             )}
-
-            {/* Contact Tab */}
             {activeTab === 'contact' && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}

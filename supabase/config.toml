@@ -1,1 +1,4 @@
 project_id = "gjkofqofnbsxssrnggvb"
+
+[functions.send-bug-report]
+verify_jwt = false
