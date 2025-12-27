@@ -63,15 +63,36 @@ const SupportDialog: React.FC<SupportDialogProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleContactSubmit = () => {
+  const [isContactSubmitting, setIsContactSubmitting] = useState(false);
+
+  const handleContactSubmit = async () => {
     if (!contactMessage.trim()) {
       toast.error('Molimo unesite poruku');
       return;
     }
-    toast.success('Poruka poslana! Hvala vam.');
-    setContactMessage('');
-    setEmail('');
-    onClose();
+
+    setIsContactSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-bug-report', {
+        body: {
+          type: 'contact',
+          message: contactMessage.trim(),
+          email: email.trim() || null,
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success('Poruka poslana! Hvala vam.');
+      setContactMessage('');
+      setEmail('');
+      onClose();
+    } catch (error) {
+      console.error('Error submitting contact message:', error);
+      toast.error('Greška pri slanju poruke. Pokušajte ponovo.');
+    } finally {
+      setIsContactSubmitting(false);
+    }
   };
 
   return (
@@ -193,9 +214,13 @@ const SupportDialog: React.FC<SupportDialogProps> = ({ isOpen, onClose }) => {
                     maxLength={1000}
                   />
                 </div>
-                <Button onClick={handleContactSubmit} className="w-full gap-2">
-                  <Send className="w-4 h-4" />
-                  Pošalji Poruku
+                <Button onClick={handleContactSubmit} className="w-full gap-2" disabled={isContactSubmitting}>
+                  {isContactSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  {isContactSubmitting ? 'Šaljem...' : 'Pošalji Poruku'}
                 </Button>
 
                 {/* Instagram accounts section */}

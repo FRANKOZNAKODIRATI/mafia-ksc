@@ -13,11 +13,14 @@ serve(async (req) => {
   }
 
   try {
-    const { description, email } = await req.json();
+    const { type, description, message, email } = await req.json();
 
-    if (!description || description.trim() === '') {
+    const content = description || message;
+    const reportType = type || 'bug';
+
+    if (!content || content.trim() === '') {
       return new Response(
-        JSON.stringify({ error: 'Description is required' }),
+        JSON.stringify({ error: 'Content is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -29,11 +32,14 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Save to database
+    // Save to appropriate table based on type
+    const tableName = reportType === 'contact' ? 'contact_messages' : 'bug_reports';
+    const columnName = reportType === 'contact' ? 'message' : 'description';
+
     const { data: report, error: dbError } = await supabase
-      .from('bug_reports')
+      .from(tableName)
       .insert({
-        description: description.trim(),
+        [columnName]: content.trim(),
         email: email?.trim() || null,
       })
       .select()
@@ -42,16 +48,18 @@ serve(async (req) => {
     if (dbError) {
       console.error('Database error:', dbError);
       return new Response(
-        JSON.stringify({ error: 'Failed to save bug report' }),
+        JSON.stringify({ error: 'Failed to save report' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Bug report saved:', report.id);
+    console.log(`${reportType} report saved:`, report.id);
 
     // Send Telegram message
     if (telegramBotToken && telegramChatId) {
-      const message = `🐛 *New Bug Report*\n\n*ID:* \`${report.id}\`\n*Email:* ${email || 'Not provided'}\n*Description:*\n${description}`;
+      const emoji = reportType === 'contact' ? '💬' : '🐛';
+      const title = reportType === 'contact' ? 'New Contact Message' : 'New Bug Report';
+      const telegramMessage = `${emoji} *${title}*\n\n*ID:* \`${report.id}\`\n*Email:* ${email || 'Not provided'}\n*Message:*\n${content}`;
 
       const telegramResponse = await fetch(
         `https://api.telegram.org/bot${telegramBotToken}/sendMessage`,
@@ -60,7 +68,7 @@ serve(async (req) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: telegramChatId,
-            text: message,
+            text: telegramMessage,
             parse_mode: 'Markdown',
           }),
         }
