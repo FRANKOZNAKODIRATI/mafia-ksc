@@ -1,17 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Users, Play, BookOpen, Heart, Star } from 'lucide-react';
 import SupportDialog from '@/components/SupportDialog';
 import SoundToggle from '@/components/SoundToggle';
-import markokofsProfile from '@/assets/markokofs-profile.webp';
-import dinomoranjkicProfile from '@/assets/dinomoranjkic-profile.jpg';
-import yukitsunodaProfile from '@/assets/yukitsunoda-profile.jpg';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Review {
+  id: string;
+  name: string;
+  text: string;
+  image_url: string | null;
+  rating: number;
+}
 
 const Index = () => {
   const navigate = useNavigate();
   const [showSupport, setShowSupport] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+
+  useEffect(() => {
+    const fetchReviews = async () => {
+      const { data } = await supabase
+        .from('reviews')
+        .select('id, name, text, image_url, rating')
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false });
+      
+      if (data) {
+        setReviews(data);
+      }
+    };
+    fetchReviews();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background overflow-hidden relative">
@@ -123,61 +145,52 @@ const Index = () => {
         </motion.div>
 
         {/* Reviews Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
-          className="mt-16 w-full max-w-2xl"
-        >
-          <h2 className="text-center text-muted-foreground text-sm uppercase tracking-widest mb-6">Recenzije</h2>
-          <div className="flex flex-col gap-4">
-            {[
-              {
-                name: "MarkoKofs",
-                image: markokofsProfile,
-                text: "Pa igrica je dobra, a igrica ti je više onak aplikaciski kao board games. Super je! Neznam točno kako se igra kužiš, ali vjerujem da će biti onak fora. Samo trebate nastavit",
-                rating: 5
-              },
-              {
-                name: "dinomoranjkic",
-                image: dinomoranjkicProfile,
-                text: "Odlična igra za ekipu! Preporučujem svima.",
-                rating: 5
-              },
-              {
-                name: "yukitsunoda",
-                image: yukitsunodaProfile,
-                text: "Zabavna i napeta igra, savršena za party!",
-                rating: 5
-              }
-            ].map((review, index) => (
-              <motion.div
-                key={review.name}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 + index * 0.15 }}
-                className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl p-4 flex gap-4"
-              >
-                <img 
-                  src={review.image} 
-                  alt={review.name}
-                  className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-foreground">{review.name}</span>
-                    <div className="flex gap-0.5">
-                      {[...Array(review.rating)].map((_, i) => (
-                        <Star key={i} className="w-3 h-3 fill-primary text-primary" />
-                      ))}
+        {reviews.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.6 }}
+            className="mt-16 w-full max-w-2xl"
+          >
+            <h2 className="text-center text-muted-foreground text-sm uppercase tracking-widest mb-6">Recenzije</h2>
+            <div className="flex flex-col gap-4">
+              {reviews.map((review, index) => (
+                <motion.div
+                  key={review.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.8 + index * 0.15 }}
+                  className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl p-4 flex gap-4"
+                >
+                  {review.image_url ? (
+                    <img 
+                      src={review.image_url} 
+                      alt={review.name}
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                      <span className="text-lg font-semibold text-muted-foreground">
+                        {review.name.charAt(0).toUpperCase()}
+                      </span>
                     </div>
+                  )}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-foreground">{review.name}</span>
+                      <div className="flex gap-0.5">
+                        {[...Array(review.rating)].map((_, i) => (
+                          <Star key={i} className="w-3 h-3 fill-primary text-primary" />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-sm">{review.text}</p>
                   </div>
-                  <p className="text-muted-foreground text-sm">{review.text}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Footer hint */}
         <motion.p
