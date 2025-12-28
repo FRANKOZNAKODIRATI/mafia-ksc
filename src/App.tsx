@@ -8,6 +8,7 @@ import CreateGame from "./pages/CreateGame";
 import JoinGame from "./pages/JoinGame";
 import Tutorial from "./pages/Tutorial";
 import GameLobbyPage from "./pages/GameLobbyPage";
+import AdminReviews from "./pages/AdminReviews";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/join" element={<JoinGame />} />
           <Route path="/tutorial" element={<Tutorial />} />
           <Route path="/lobby/:gameCode" element={<GameLobbyPage />} />
+          <Route path="/admin/reviews" element={<AdminReviews />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
