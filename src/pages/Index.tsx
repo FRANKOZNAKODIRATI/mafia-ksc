@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Users, Play, BookOpen, Heart, Star } from 'lucide-react';
 import SupportDialog from '@/components/SupportDialog';
 import SoundToggle from '@/components/SoundToggle';
+import HiddenAdminPanel from '@/components/HiddenAdminPanel';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Review {
@@ -38,6 +39,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background overflow-hidden relative">
       <SoundToggle />
+      <HiddenAdminPanel />
       
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
