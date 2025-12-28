@@ -157,36 +157,6 @@ export type Database = {
           },
         ]
       }
-      reviews: {
-        Row: {
-          created_at: string
-          id: string
-          image_url: string | null
-          is_approved: boolean
-          name: string
-          rating: number
-          text: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          image_url?: string | null
-          is_approved?: boolean
-          name: string
-          rating?: number
-          text: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          image_url?: string | null
-          is_approved?: boolean
-          name?: string
-          rating?: number
-          text?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
