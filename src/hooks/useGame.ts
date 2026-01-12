@@ -161,40 +161,46 @@ export const useGame = (gameCode: string | null) => {
       )
       .subscribe();
 
-    // Subscribe to player changes for this game
+    return () => {
+      supabase.removeChannel(gameChannel);
+    };
+  }, [gameCode, fetchGameData]);
+
+  // Separate subscription for players to avoid stale game.id reference
+  useEffect(() => {
+    if (!game?.id) return;
+
     const playersChannel = supabase
-      .channel(`players-${gameCode}`)
+      .channel(`players-${game.id}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'players',
+          filter: `game_id=eq.${game.id}`,
         },
         async (payload) => {
           console.log('Players update:', payload);
           // Refetch players when any change happens
-          if (game?.id) {
-            const { data: playersData } = await supabase
-              .from('players')
-              .select('*')
-              .eq('game_id', game.id)
-              .order('created_at', { ascending: true });
-            
-            if (playersData) {
-              setPlayers(playersData);
-              const current = playersData.find(p => p.client_id === clientId);
-              if (current) {
-                setCurrentPlayer(current);
-              }
+          const { data: playersData } = await supabase
+            .from('players')
+            .select('*')
+            .eq('game_id', game.id)
+            .order('created_at', { ascending: true });
+          
+          if (playersData) {
+            setPlayers(playersData);
+            const current = playersData.find(p => p.client_id === clientId);
+            if (current) {
+              setCurrentPlayer(current);
+            }
 
-              // Check win condition on player update (only if game has started)
-              // We need to get current game phase from state
-              if (game && game.phase !== 'lobby') {
-                const winResult = checkWinCondition(playersData);
-                if (winResult) {
-                  setWinner(winResult);
-                }
+            // Check win condition on player update (only if game has started)
+            if (game.phase !== 'lobby') {
+              const winResult = checkWinCondition(playersData);
+              if (winResult) {
+                setWinner(winResult);
               }
             }
           }
@@ -203,10 +209,9 @@ export const useGame = (gameCode: string | null) => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(gameChannel);
       supabase.removeChannel(playersChannel);
     };
-  }, [gameCode, fetchGameData, clientId, game?.id, checkWinCondition]);
+  }, [game?.id, game?.phase, clientId, checkWinCondition]);
 
   // Create a new game
   const createGame = async (
@@ -295,6 +300,11 @@ export const useGame = (gameCode: string | null) => {
       // Get non-host players for role assignment
       const nonHostPlayers = players.filter(p => !p.is_host);
       
+      if (nonHostPlayers.length < 2) {
+        toast.error('Potrebna su barem 2 igrača (osim domaćina)');
+        return;
+      }
+
       // Assign roles to non-host players only (host is narrator)
       const availableRoles: string[] = [
         ...Array(game.mafia_count).fill('mafia'),
@@ -309,19 +319,30 @@ export const useGame = (gameCode: string | null) => {
       // Shuffle roles
       const shuffled = [...availableRoles].sort(() => Math.random() - 0.5);
 
-      // Update each non-host player with their role
-      for (let i = 0; i < nonHostPlayers.length; i++) {
-        await supabase
-          .from('players')
-          .update({ role: shuffled[i] })
-          .eq('id', nonHostPlayers[i].id);
-      }
+      // Build all role updates
+      const roleUpdates = nonHostPlayers.map((player, i) => ({
+        id: player.id,
+        role: shuffled[i],
+      }));
+
+      // Update all non-host players with their roles in parallel
+      await Promise.all(
+        roleUpdates.map(({ id, role }) =>
+          supabase
+            .from('players')
+            .update({ role })
+            .eq('id', id)
+        )
+      );
 
       // Host gets special narrator role
       await supabase
         .from('players')
         .update({ role: 'narrator' })
         .eq('id', currentPlayer.id);
+
+      // Small delay to ensure role updates are propagated
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Update game phase
       await supabase
