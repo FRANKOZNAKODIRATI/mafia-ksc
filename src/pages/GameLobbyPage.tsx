@@ -193,7 +193,33 @@ const GameLobbyPage = () => {
     );
   }
 
-  if (phase === 'night' && currentTurn) {
+  if (phase === 'night') {
+    // If we haven't received current_turn yet, show a safe loading state instead of a blank screen
+    if (!currentTurn) {
+      return (
+        <>
+          <SoundToggle />
+          <div className="min-h-screen bg-background flex items-center justify-center p-6">
+            <div className="text-center">
+              <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-3" />
+              <p className="text-muted-foreground">Pokrećem noć... samo trenutak.</p>
+            </div>
+          </div>
+          {isHost && (
+            <HostControls
+              phase={phase}
+              currentTurn={null}
+              onStartVoting={handleStartVoting}
+              onEndVoting={handleEndVoting}
+              onNextTurn={advanceToNextTurn}
+              onStartNight={startNight}
+              votingStarted={votingStarted}
+            />
+          )}
+        </>
+      );
+    }
+
     return (
       <>
         <SoundToggle />
@@ -281,7 +307,15 @@ const GameLobbyPage = () => {
     );
   }
 
-  return null;
+  // Fallback: never render a blank screen
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="text-center">
+        <p className="text-foreground font-medium mb-2">Nešto je pošlo po zlu.</p>
+        <p className="text-muted-foreground">Nije moguće prikazati ovu fazu igre.</p>
+      </div>
+    </div>
+  );
 };
 
 export default GameLobbyPage;
